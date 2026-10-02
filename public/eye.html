@@ -30,6 +30,35 @@
   <!-- Pure OLED Black Standby Overlay (Zero text, zero notification, 100% pure black) -->
   <div id="standby-overlay" class="active"></div>
 
+  <!-- Eye Selection Modal (Only if side is not specified in URL or storage) -->
+  <div id="side-select-modal" class="side-modal hidden">
+    <div class="side-modal-card">
+      <div class="side-modal-title">🐲 Choisissez l'Œil du Dragon</div>
+      <div class="side-modal-desc">Sélectionnez le rôle de cet écran :</div>
+      <div class="side-btn-group">
+        <button id="btn-select-left" class="btn-side-choice" type="button">
+          <span class="side-choice-icon">👁️⬅️</span>
+          <span class="side-choice-text">Œil Gauche</span>
+        </button>
+        <button id="btn-select-right" class="btn-side-choice" type="button">
+          <span class="side-choice-icon">➡️👁️</span>
+          <span class="side-choice-text">Œil Droit</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen prompt button (Visible if fullscreen failed or exited) -->
+  <button id="btn-fullscreen-trigger" class="fullscreen-prompt-btn hidden" type="button">
+    ⛶ Plein Écran
+  </button>
+
+  <!-- Cadena / Unlock button in corner (Appears when touching screen while locked) -->
+  <button id="btn-unlock-cadena" class="cadena-btn hidden" type="button" title="Déverrouiller le cadrage">
+    <span class="cadena-icon">🔒</span>
+    <span class="cadena-label">Modifier le cadrage</span>
+  </button>
+
   <!-- Corner Framing Validation Button (Disappears completely once validated) -->
   <button id="btn-validate-framing" class="corner-validate-btn" type="button">
     ✓ Valider le cadrage

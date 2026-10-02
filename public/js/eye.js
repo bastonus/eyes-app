@@ -4,7 +4,6 @@
  */
 (function() {
   const urlParams = new URLSearchParams(window.location.search);
-  const side = (urlParams.get('side') || 'left').toLowerCase(); // 'left' or 'right'
   const isCalibInit = urlParams.get('calib') === '1';
 
   // DOM Elements
@@ -12,15 +11,31 @@
   const eyeAudio = document.getElementById('eye-audio');
   const touchSurface = document.getElementById('touch-surface');
   const standbyOverlay = document.getElementById('standby-overlay');
-  let btnValidateFraming = document.getElementById('btn-validate-framing');
+  const btnValidateFraming = document.getElementById('btn-validate-framing');
+  const btnUnlockCadena = document.getElementById('btn-unlock-cadena');
+  const btnFullscreenTrigger = document.getElementById('btn-fullscreen-trigger');
+  const sideModal = document.getElementById('side-select-modal');
+  const btnSelectLeft = document.getElementById('btn-select-left');
+  const btnSelectRight = document.getElementById('btn-select-right');
 
-  const sideName = side === 'right' ? 'Œil Droit' : 'Œil Gauche';
-  document.title = `Dragon Eye (${sideName})`;
+  // Eye Side resolution (URL parameter > localStorage > User Modal Selection)
+  let rawSide = urlParams.get('side');
+  if (rawSide) {
+    rawSide = rawSide.toLowerCase();
+    localStorage.setItem('dragon_eye_side', rawSide);
+  } else {
+    rawSide = localStorage.getItem('dragon_eye_side');
+  }
 
-  // Framing & Calibration State
-  // Frame at 8.0s corresponds to dragon eye wide open and vibrant (before 4.7s video is black)
+  let side = rawSide === 'right' || rawSide === 'left' ? rawSide : null;
+  let sideName = side === 'right' ? 'Œil Droit' : (side === 'left' ? 'Œil Gauche' : 'Œil non configuré');
+  document.title = side ? `Dragon Eye (${sideName})` : 'Dragon Eye - Sélection';
+
+  // Framing & Lock State
+  // Frame at 8.0s corresponds to dragon eye wide open and vibrant
   const FRAMING_TIMESTAMP = 8.0;
-  let isFramingValidated = !isCalibInit && sessionStorage.getItem(`dragon_framing_done_${side}`) === 'true';
+  let isFramingLocked = !isCalibInit && side ? (sessionStorage.getItem(`dragon_framing_locked_${side}`) === 'true') : false;
+  let cadenaTimeout = null;
 
   // Transform state (Pan & Zoom/Dézoom)
   let transform = {
@@ -61,22 +76,30 @@
   let mediaCachePercent = 0;
   let currentMediaVersion = '1';
 
-  // Load saved calibration from localStorage
-  const storageKey = `dragon_calib_${side}`;
-  const savedCalib = localStorage.getItem(storageKey);
-  if (savedCalib) {
-    try {
-      transform = Object.assign(transform, JSON.parse(savedCalib));
-    } catch (e) {
-      console.warn('Failed to parse saved calibration:', e);
+  // Storage key helper
+  function getStorageKey() {
+    return `dragon_calib_${side || 'default'}`;
+  }
+
+  function loadSavedCalibration() {
+    if (!side) return;
+    const savedCalib = localStorage.getItem(getStorageKey());
+    if (savedCalib) {
+      try {
+        transform = Object.assign(transform, JSON.parse(savedCalib));
+        applyTransform();
+      } catch (e) {
+        console.warn('Failed to parse saved calibration:', e);
+      }
     }
   }
 
   // Set initial video source
-  const videoSrc = side === 'right' ? '/media/right_eye.mp4' : '/media/left_eye.mp4';
+  let videoSrc = side === 'right' ? '/media/right_eye.mp4' : '/media/left_eye.mp4';
   
   // Asynchronously ensure media is 100% cached locally before show
   async function ensureMediaCached(vUrl, aUrl, version = '1') {
+    if (!side) return;
     try {
       currentMediaVersion = String(version);
       
@@ -179,6 +202,20 @@
   }
 
   // Fullscreen Landscape, Screen Wake Lock & Brightness
+  function updateFullscreenUI() {
+    const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (btnFullscreenTrigger) {
+      if (isFs) {
+        btnFullscreenTrigger.classList.add('hidden');
+      } else {
+        btnFullscreenTrigger.classList.remove('hidden');
+      }
+    }
+  }
+
+  document.addEventListener('fullscreenchange', updateFullscreenUI);
+  document.addEventListener('webkitfullscreenchange', updateFullscreenUI);
+
   async function enterFullscreenLandscape() {
     try {
       const docEl = document.documentElement;
@@ -203,6 +240,15 @@
 
     requestWakeLock();
     initWebAudio();
+    updateFullscreenUI();
+    setTimeout(updateFullscreenUI, 350);
+  }
+
+  if (btnFullscreenTrigger) {
+    btnFullscreenTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      enterFullscreenLandscape();
+    });
   }
 
   async function requestWakeLock() {
@@ -224,6 +270,7 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       requestWakeLock();
+      updateFullscreenUI();
     }
   });
 
@@ -232,7 +279,88 @@
     if (document.visibilityState === 'visible' && !isWakeLockActive) {
       requestWakeLock();
     }
+    updateFullscreenUI();
   }, 3000);
+
+  // Framing Mode Display (Dragon eye visible at 8.0s for pan/zoom adjustments)
+  function showFramingFrame() {
+    if (isShowPlaying || isFramingLocked || !side) return;
+    standbyOverlay.classList.remove('active');
+
+    try {
+      video.currentTime = FRAMING_TIMESTAMP;
+    } catch (e) {}
+
+    // Force video decoder to draw the frame
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        setTimeout(() => {
+          if (!isShowPlaying && !isFramingLocked) {
+            video.pause();
+            video.currentTime = FRAMING_TIMESTAMP;
+          }
+        }, 120);
+      }).catch(() => {
+        // Autoplay policy prevented playback without touch gesture;
+        // The first touchstart will render it.
+      });
+    }
+  }
+
+  video.addEventListener('loadeddata', () => {
+    if (!isFramingLocked && !isShowPlaying) showFramingFrame();
+  });
+  video.addEventListener('canplay', () => {
+    if (!isFramingLocked && !isShowPlaying) showFramingFrame();
+  });
+
+  // Lock Framing: lock gestures, switch to 100% pure black OLED
+  function lockFraming() {
+    isFramingLocked = true;
+    if (side) {
+      sessionStorage.setItem(`dragon_framing_locked_${side}`, 'true');
+      saveTransform();
+    }
+
+    if (btnValidateFraming) btnValidateFraming.classList.add('hidden');
+    if (btnUnlockCadena) btnUnlockCadena.classList.add('hidden');
+    clearTimeout(cadenaTimeout);
+
+    if (!isShowPlaying) {
+      video.pause();
+      video.currentTime = 0;
+      standbyOverlay.classList.add('active');
+    }
+  }
+
+  // Unlock Framing: reveal 8.0s frame, validate button, and enable pan/zoom
+  function unlockFraming() {
+    isFramingLocked = false;
+    if (side) {
+      sessionStorage.removeItem(`dragon_framing_locked_${side}`);
+    }
+    clearTimeout(cadenaTimeout);
+
+    if (btnUnlockCadena) btnUnlockCadena.classList.add('hidden');
+    if (btnValidateFraming) btnValidateFraming.classList.remove('hidden');
+
+    showFramingFrame();
+  }
+
+  if (btnValidateFraming) {
+    btnValidateFraming.addEventListener('click', (e) => {
+      e.stopPropagation();
+      lockFraming();
+    });
+  }
+
+  if (btnUnlockCadena) {
+    btnUnlockCadena.addEventListener('click', (e) => {
+      e.stopPropagation();
+      unlockFraming();
+    });
+  }
 
   // Touch Manipulation: 1 finger Pan, 2 fingers Pinch-to-zoom / Dézoom
   let touchStartX = 0;
@@ -241,9 +369,6 @@
   let touchStartPosY = 0;
   let touchStartDistance = 0;
   let touchStartScale = 1.0;
-
-  // Tap detection for silent arming & triple-tap calibration toggle
-  let tapTimes = [];
 
   function getDistance(t1, t2) {
     const dx = t1.clientX - t2.clientX;
@@ -255,21 +380,25 @@
     // Silently ensure fullscreen, landscape and wakeLock on any touch
     enterFullscreenLandscape();
 
-    // If framing is not yet validated and video is not playing, make sure 8s frame is rendered
-    if (!isFramingValidated && !isShowPlaying && Math.abs(video.currentTime - FRAMING_TIMESTAMP) > 0.5) {
-      showFramingFrame();
+    if (!side) return;
+
+    // IF SCREEN IS LOCKED: tapping the screen displays the Cadena unlock button in corner
+    if (isFramingLocked && !isShowPlaying) {
+      if (btnUnlockCadena) {
+        btnUnlockCadena.classList.remove('hidden');
+        clearTimeout(cadenaTimeout);
+        cadenaTimeout = setTimeout(() => {
+          if (isFramingLocked && btnUnlockCadena) {
+            btnUnlockCadena.classList.add('hidden');
+          }
+        }, 4000);
+      }
+      return; // Do NOT manipulate video while locked
     }
 
-    const now = Date.now();
-    tapTimes.push(now);
-    // Keep only taps within 700ms
-    tapTimes = tapTimes.filter(t => now - t < 700);
-
-    // Triple tap detected -> Restore framing mode if operator needs to adjust
-    if (tapTimes.length >= 3) {
-      tapTimes = [];
-      restoreFramingMode();
-      return;
+    // If framing is active (unlocked) and video is not playing, make sure 8s frame is rendered
+    if (!isFramingLocked && !isShowPlaying && Math.abs(video.currentTime - FRAMING_TIMESTAMP) > 0.5) {
+      showFramingFrame();
     }
 
     const isPortrait = window.innerHeight > window.innerWidth;
@@ -290,6 +419,8 @@
   }, { passive: true });
 
   touchSurface.addEventListener('touchmove', (e) => {
+    if (isFramingLocked || !side) return;
+
     const isPortrait = window.innerHeight > window.innerWidth;
 
     if (e.touches.length === 1) {
@@ -334,100 +465,76 @@
   }, { passive: true });
 
   touchSurface.addEventListener('touchend', (e) => {
-    saveTransform();
+    if (!isFramingLocked && side) {
+      saveTransform();
+    }
   }, { passive: true });
 
-  // Framing Mode Display (Dragon eye visible at 8.0s for pan/zoom adjustments)
-  function showFramingFrame() {
-    if (isShowPlaying || isFramingValidated) return;
-    standbyOverlay.classList.remove('active');
-
+  // Side Selection & Initialization
+  function chooseSide(chosenSide) {
+    side = chosenSide;
+    sideName = side === 'right' ? 'Œil Droit' : 'Œil Gauche';
+    document.title = `Dragon Eye (${sideName})`;
+    localStorage.setItem('dragon_eye_side', side);
+    
     try {
-      video.currentTime = FRAMING_TIMESTAMP;
+      const u = new URL(window.location);
+      u.searchParams.set('side', side);
+      window.history.replaceState(null, '', u.toString());
     } catch (e) {}
 
-    // Force video decoder to draw the frame
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise.then(() => {
-        setTimeout(() => {
-          if (!isShowPlaying && !isFramingValidated) {
-            video.pause();
-            video.currentTime = FRAMING_TIMESTAMP;
-          }
-        }, 120);
-      }).catch(() => {
-        // Autoplay policy prevented playback without touch gesture;
-        // The first touchstart will render it.
+    if (sideModal) sideModal.classList.add('hidden');
+
+    loadSavedCalibration();
+    videoSrc = side === 'right' ? '/media/right_eye.mp4' : '/media/left_eye.mp4';
+    ensureMediaCached(videoSrc, currentAudioFile, currentMediaVersion);
+
+    // Register immediately with server and master console
+    if (socket && socket.connected) {
+      socket.emit('client:register', {
+        role: 'eye',
+        side: side,
+        deviceName: `${sideName} (${navigator.platform || 'Mobile'})`
       });
     }
-  }
 
-  video.addEventListener('loadeddata', () => {
-    if (!isFramingValidated && !isShowPlaying) showFramingFrame();
-  });
-  video.addEventListener('canplay', () => {
-    if (!isFramingValidated && !isShowPlaying) showFramingFrame();
-  });
-
-  // Complete Framing: permanently remove button and switch to 100% pure black OLED
-  function completeFraming() {
-    isFramingValidated = true;
-    sessionStorage.setItem(`dragon_framing_done_${side}`, 'true');
-    saveTransform();
-
-    const btn = document.getElementById('btn-validate-framing');
-    if (btn) {
-      btn.classList.add('hidden');
-      btn.remove();
-    }
-
-    if (!isShowPlaying) {
-      video.pause();
-      video.currentTime = 0;
-      standbyOverlay.classList.add('active');
-    }
-  }
-
-  // Restore framing mode (e.g. discreet triple-tap emergency adjustment)
-  function restoreFramingMode() {
-    if (isShowPlaying) return;
-    isFramingValidated = false;
-    sessionStorage.removeItem(`dragon_framing_done_${side}`);
-
-    let btn = document.getElementById('btn-validate-framing');
-    if (!btn) {
-      btn = document.createElement('button');
-      btn.id = 'btn-validate-framing';
-      btn.className = 'corner-validate-btn';
-      btn.type = 'button';
-      btn.textContent = '✓ Valider le cadrage';
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        completeFraming();
-      });
-      document.body.appendChild(btn);
+    isFramingLocked = sessionStorage.getItem(`dragon_framing_locked_${side}`) === 'true';
+    if (isFramingLocked) {
+      lockFraming();
     } else {
-      btn.classList.remove('hidden');
+      unlockFraming();
     }
-
-    showFramingFrame();
   }
 
-  // Initial Framing State setup
-  if (isFramingValidated) {
-    if (btnValidateFraming) btnValidateFraming.remove();
-    standbyOverlay.classList.add('active');
-  } else {
-    standbyOverlay.classList.remove('active');
-    if (btnValidateFraming) {
-      btnValidateFraming.addEventListener('click', (e) => {
+  // Handle Side Modal or Direct Init
+  if (!side) {
+    if (sideModal) sideModal.classList.remove('hidden');
+    if (btnSelectLeft) {
+      btnSelectLeft.addEventListener('click', (e) => {
         e.stopPropagation();
-        completeFraming();
+        chooseSide('left');
+        enterFullscreenLandscape();
       });
     }
-    showFramingFrame();
+    if (btnSelectRight) {
+      btnSelectRight.addEventListener('click', (e) => {
+        e.stopPropagation();
+        chooseSide('right');
+        enterFullscreenLandscape();
+      });
+    }
+  } else {
+    loadSavedCalibration();
+    ensureMediaCached(videoSrc, currentAudioFile, currentMediaVersion);
+    if (isFramingLocked) {
+      lockFraming();
+    } else {
+      unlockFraming();
+    }
   }
+
+  // Check initial fullscreen state
+  updateFullscreenUI();
 
   // Socket.IO & Sync Engine
   const socket = io();
@@ -435,11 +542,13 @@
   syncEngine.start(1500);
 
   socket.on('connect', () => {
-    socket.emit('client:register', {
-      role: 'eye',
-      side: side,
-      deviceName: `${sideName} (${navigator.platform || 'Mobile'})`
-    });
+    if (side) {
+      socket.emit('client:register', {
+        role: 'eye',
+        side: side,
+        deviceName: `${sideName} (${navigator.platform || 'Mobile'})`
+      });
+    }
     enterFullscreenLandscape();
   });
 
@@ -516,10 +625,8 @@
     showDuration = duration;
     lastHardSeekTime = 0;
 
-    // Ensure framing button is permanently removed and standby veil is lifted
-    isFramingValidated = true;
-    const btn = document.getElementById('btn-validate-framing');
-    if (btn) btn.remove();
+    // Lock framing and unveil pure black screen for playback
+    lockFraming();
     standbyOverlay.classList.remove('active');
 
     enterFullscreenLandscape();
@@ -657,13 +764,14 @@
 
     lastDriftMs = 0;
 
-    // Return to 100% pure black OLED
+    // Lock framing and return to 100% pure black OLED
+    lockFraming();
     standbyOverlay.classList.add('active');
   }
 
   // Telemetry heartbeat to master
   setInterval(() => {
-    if (socket.connected) {
+    if (socket.connected && side) {
       socket.emit('eye:telemetry', {
         side: side,
         currentTime: video.currentTime,
