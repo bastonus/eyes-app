@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>🐲 Yeux de Dragon - Synchronisation OLED</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%2202 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐲</text></svg>">
+</head>
+<body class="oled-bg">
+
+  <header class="app-header">
+    <div class="logo-group">
+      <span class="logo-icon">🐲</span>
+      <span class="logo-title">DRAGON EYES SYNC</span>
+    </div>
+    <div id="connection-badge" class="badge badge-success">
+      <span class="badge-dot"></span> Serveur en ligne
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero-section">
+      <h1 class="hero-title">Effet Spécial Yeux de Dragon</h1>
+      <p class="hero-subtitle">
+        Synchronisation milliseconde de 2 écrans OLED avec contrôle de régie à distance et audio Bluetooth.
+      </p>
+    </section>
+
+    <div class="modes-grid">
+      <!-- MODE OEIL GAUCHE -->
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">👁️⬅️</div>
+          <h2 class="mode-title">Œil Gauche</h2>
+          <p class="mode-desc">
+            Téléphone OLED n°1. Affiche l'œil gauche avec noir absolu, calibrage de cadrage, maintien de l'écran allumé et verrouillage tactile.
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; width: 100%;">
+          <a href="/eye?side=left" class="btn btn-primary" style="flex: 1;">Ouvrir Œil Gauche</a>
+          <button class="btn btn-secondary btn-sm" onclick="showQr('/eye?side=left', 'Œil Gauche')">📱 QR</button>
+        </div>
+      </div>
+
+      <!-- MODE OEIL DROIT -->
+      <div class="mode-card">
+        <div>
+          <div class="mode-icon">➡️👁️</div>
+          <h2 class="mode-title">Œil Droit</h2>
+          <p class="mode-desc">
+            Téléphone OLED n°2. Affiche l'œil droit synchronisé à la frame près avec l'œil gauche, avec zoom et positionnement ajustables.
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; width: 100%;">
+          <a href="/eye?side=right" class="btn btn-primary" style="flex: 1;">Ouvrir Œil Droit</a>
+          <button class="btn btn-secondary btn-sm" onclick="showQr('/eye?side=right', 'Œil Droit')">📱 QR</button>
+        </div>
+      </div>
+
+      <!-- MODE REGIE MAITRE -->
+      <div class="mode-card" style="border-color: rgba(255, 85, 0, 0.4);">
+        <div>
+          <div class="mode-icon">🎛️⚡</div>
+          <h2 class="mode-title">Régie / Maître</h2>
+          <p class="mode-desc">
+            Télécommande de lancement du show. Lance les vidéos et l'audio (Bluetooth), gère la boucle, l'arrêt en fin de cycle et l'upload de vidéos coupées automatiquement.
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; width: 100%;">
+          <a href="/master" class="btn btn-warning" style="flex: 1;">Accéder à la Régie</a>
+          <button class="btn btn-secondary btn-sm" onclick="showQr('/master', 'Régie Maître')">📱 QR</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GUIDE D'INSTALLATION RAPIDE -->
+    <section class="card" style="margin-top: 2rem;">
+      <div class="card-header">
+        <h3 class="card-title">💡 Conseils pour le camp & l'effet OLED</h3>
+      </div>
+      <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-muted);">
+        <p>1. <strong>Luminosité :</strong> Sur les deux téléphones OLED, réglez manuellement la luminosité à <strong>100%</strong> dans le menu de votre téléphone.</p>
+        <p>2. <strong>Plein écran :</strong> Appuyez sur « Activer Plein Écran » sur chaque téléphone pour masquer la barre d'adresse du navigateur.</p>
+        <p>3. <strong>Anti-sommeil :</strong> L'application verrouille automatiquement l'extinction de l'écran (Screen Wake Lock).</p>
+        <p>4. <strong>Calibrage physique :</strong> Utilisez les curseurs ou le zoom à deux doigts pour cadrer parfaitement chaque œil dans la sculpture du dragon, puis appuyez sur <em>« Verrouiller »</em>.</p>
+        <p>5. <strong>Audio :</strong> Connectez l'appareil maître en Bluetooth à votre enceinte sonorisation avant de cliquer sur <em>« Lancer le show »</em>.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- QR CODE MODAL -->
+  <div id="qr-modal" class="qr-modal" onclick="closeQr(event)">
+    <div class="qr-box" onclick="event.stopPropagation()">
+      <h3 id="qr-title" style="margin-bottom: 0.5rem;">Scanner pour ouvrir</h3>
+      <p id="qr-url-text" style="font-size: 0.8rem; color: var(--text-muted); word-break: break-all;"></p>
+      <img id="qr-image" src="" alt="QR Code">
+      <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" onclick="closeQr()">Fermer</button>
+    </div>
+  </div>
+
+  <script>
+    async function showQr(path, title) {
+      const fullUrl = window.location.origin + path;
+      document.getElementById('qr-title').innerText = '📱 Scanner: ' + title;
+      document.getElementById('qr-url-text').innerText = fullUrl;
+      const res = await fetch('/api/qrcode?url=' + encodeURIComponent(fullUrl));
+      const data = await res.json();
+      document.getElementById('qr-image').src = data.qrcode;
+      document.getElementById('qr-modal').classList.add('active');
+    }
+
+    function closeQr(e) {
+      document.getElementById('qr-modal').classList.remove('active');
+    }
+  </script>
+</body>
+</html>

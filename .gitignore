@@ -1,0 +1,5 @@
+node_modules
+eyes.mov
+uploads/temp/*
+*.log
+.DS_Store

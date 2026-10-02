@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>🎛️ Régie Maître - Yeux de Dragon</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/master.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎛️</text></svg>">
+</head>
+<body class="oled-bg">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="logo-group">
+      <span class="logo-icon">🎛️</span>
+      <span class="logo-title">RÉGIE MAÎTRE - DRAGON</span>
+    </div>
+    <div style="display: flex; gap: 0.8rem; align-items: center;">
+      <span id="ping-display" style="font-size: 0.8rem; color: var(--text-muted);">Ping: -- ms</span>
+      <div id="connection-badge" class="badge badge-success">
+        <span class="badge-dot"></span> Connecté
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- TELEMETRY: STATUS OF BOTH OLED PHONES -->
+    <div class="eyes-status-grid">
+      <!-- LEFT EYE CARD -->
+      <div id="card-left-eye" class="eye-status-card disconnected">
+        <div class="eye-card-top">
+          <span class="eye-name">👁️ Œil Gauche</span>
+          <span id="badge-left-eye" class="badge badge-danger">
+            <span class="badge-dot"></span> Déconnecté
+          </span>
+        </div>
+        <div class="telemetry-row">
+          <span>État</span>
+          <span id="status-left-eye" class="telemetry-val">En attente</span>
+        </div>
+        <div class="telemetry-row">
+          <span>Dérive synchro</span>
+          <span id="drift-left-eye" class="telemetry-val">-- ms</span>
+        </div>
+        <div class="telemetry-row">
+          <span>Anti-veille (WakeLock)</span>
+          <span id="wakelock-left-eye" class="telemetry-val">--</span>
+        </div>
+        <div style="margin-top: 0.8rem;">
+          <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="showQr('/eye?side=left', 'Œil Gauche')">
+            📱 Scanner QR Gauche
+          </button>
+        </div>
+      </div>
+
+      <!-- RIGHT EYE CARD -->
+      <div id="card-right-eye" class="eye-status-card disconnected">
+        <div class="eye-card-top">
+          <span class="eye-name">👁️ Œil Droit</span>
+          <span id="badge-right-eye" class="badge badge-danger">
+            <span class="badge-dot"></span> Déconnecté
+          </span>
+        </div>
+        <div class="telemetry-row">
+          <span>État</span>
+          <span id="status-right-eye" class="telemetry-val">En attente</span>
+        </div>
+        <div class="telemetry-row">
+          <span>Dérive synchro</span>
+          <span id="drift-right-eye" class="telemetry-val">-- ms</span>
+        </div>
+        <div class="telemetry-row">
+          <span>Anti-veille (WakeLock)</span>
+          <span id="wakelock-right-eye" class="telemetry-val">--</span>
+        </div>
+        <div style="margin-top: 0.8rem;">
+          <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="showQr('/eye?side=right', 'Œil Droit')">
+            📱 Scanner QR Droit
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN DASHBOARD GRID -->
+    <div class="dashboard-grid">
+
+      <!-- LEFT COLUMN: CONTROLS & TIMELINE -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- SHOW CONTROL HUB -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">⚡ Contrôle du Show</h3>
+            <span id="show-status-badge" class="badge badge-warning">En veille</span>
+          </div>
+
+          <div class="controls-hub">
+            <!-- BIG START BUTTON -->
+            <button id="btn-start-show" class="big-play-btn">
+              <span>🔥</span> LANCER LE SHOW (AUDIO & YEUX)
+            </button>
+
+            <!-- STOP BUTTONS GROUP -->
+            <div class="stop-controls-group">
+              <button id="btn-stop-loop" class="btn btn-warning" style="padding: 1rem; flex-direction: column; gap: 0.2rem;">
+                <span style="font-size: 1.1rem;">⏳</span>
+                <span>Arrêter (Fin du cycle)</span>
+                <span style="font-size: 0.72rem; opacity: 0.8;">Finit la vidéo sans couper</span>
+              </button>
+
+              <button id="btn-stop-now" class="btn btn-danger" style="padding: 1rem; flex-direction: column; gap: 0.2rem;">
+                <span style="font-size: 1.1rem;">🛑</span>
+                <span>Arrêt Immédiat</span>
+                <span style="font-size: 0.72rem; opacity: 0.8;">Coupe tout instantanément</span>
+              </button>
+            </div>
+
+            <!-- STOPPING BANNER -->
+            <div id="stopping-banner" class="stopping-banner">
+              ⏳ Arrêt programmé : le dragon terminera son cycle dans <strong id="stop-countdown">--</strong>s puis s'endormira.
+            </div>
+
+            <!-- TIMELINE & DURATION -->
+            <div class="playback-timeline-box">
+              <div class="timeline-progress-bar">
+                <div id="timeline-fill" class="timeline-fill"></div>
+              </div>
+              <div class="timeline-info">
+                <span id="timeline-time">00:00 / 01:34</span>
+                <span id="timeline-cycle">Cycle : 0</span>
+              </div>
+            </div>
+
+            <!-- BLUETOOTH AUDIO PLAYER ON MASTER -->
+            <div class="audio-player-box">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                <span style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">
+                  🔊 Audio Maître (Enceinte Bluetooth)
+                </span>
+                <span id="audio-file-name" style="font-size: 0.75rem; color: #ff9944;">default_audio.mp3</span>
+              </div>
+              <audio id="master-audio-element" preload="auto" controls></audio>
+            </div>
+          </div>
+        </div>
+
+        <!-- AUDIO CONFIGURATION & UPLOAD -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🎵 Gestion de l'Audio</h3>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Sélectionner la piste audio à jouer :</label>
+            <select id="select-audio" class="form-select"></select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Diffusion du son :</label>
+            <div class="radio-group">
+              <label class="radio-chip selected">
+                <input type="radio" name="audio-target" value="master" checked>
+                <span>Sur cet appareil Maître (Bluetooth)</span>
+              </label>
+              <label class="radio-chip">
+                <input type="radio" name="audio-target" value="eyes">
+                <span>Sur les téléphones en stéréo</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- UPLOAD CUSTOM AUDIO -->
+          <div class="upload-dropzone" id="audio-dropzone" onclick="document.getElementById('input-audio-file').click()">
+            <input type="file" id="input-audio-file" accept="audio/*">
+            <div class="upload-icon">🎧</div>
+            <div class="upload-text">Uploader un nouveau son (MP3, WAV, M4A)</div>
+            <div class="upload-subtext">Cliquez ou glissez-déposez le fichier ici</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: VIDEO UPLOAD & AUTO-SPLIT -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🎬 Uploader & Découper une Vidéo</h3>
+          </div>
+
+          <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1rem;">
+            Uploadez une vidéo contenant les 2 yeux côte à côte. Le serveur calcule ses dimensions, <strong>coupe exactement au milieu</strong> (Moitié gauche ➔ Œil Gauche, Moitié droite ➔ Œil Droit) et extrait la piste audio automatiquement !
+          </p>
+
+          <!-- VIDEO DROPZONE -->
+          <div class="upload-dropzone" id="video-dropzone" onclick="document.getElementById('input-video-file').click()">
+            <input type="file" id="input-video-file" accept="video/*">
+            <div class="upload-icon">📹</div>
+            <div class="upload-text">Déposer une nouvelle vidéo (MOV, MP4, MKV)</div>
+            <div class="upload-subtext">Découpage automatique Left / Right au centre</div>
+          </div>
+
+          <!-- PROCESSING PROGRESS CARD -->
+          <div id="video-progress-card" class="progress-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span id="progress-message" style="font-size: 0.85rem; font-weight: 600; color: #ffaa55;">
+                Traitement en cours...
+              </span>
+              <span id="progress-percent" style="font-size: 0.85rem; font-weight: 700; color: #ffffff;">0%</span>
+            </div>
+            <div class="progress-bar-outer">
+              <div id="progress-bar-fill" class="progress-bar-inner"></div>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">
+              Formatage automatique web H.264 optimisé OLED.
+            </div>
+          </div>
+
+          <!-- CURRENT MEDIA INFO -->
+          <div style="background: #11141c; border-radius: 12px; padding: 1rem; margin-top: 1rem;">
+            <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.5rem; color: #ffffff;">
+              📼 Vidéo active en mémoire :
+            </div>
+            <div class="telemetry-row">
+              <span>Durée d'un cycle</span>
+              <span id="info-duration" class="telemetry-val">-- s</span>
+            </div>
+            <div class="telemetry-row">
+              <span>Résolution par œil</span>
+              <span id="info-resolution" class="telemetry-val">-- x --</span>
+            </div>
+            <div class="telemetry-row">
+              <span>Flux Gauche</span>
+              <span class="telemetry-val">/media/left_eye.mp4</span>
+            </div>
+            <div class="telemetry-row">
+              <span>Flux Droit</span>
+              <span class="telemetry-val">/media/right_eye.mp4</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- QR CODE MODAL -->
+  <div id="qr-modal" class="qr-modal" onclick="closeQr(event)">
+    <div class="qr-box" onclick="event.stopPropagation()">
+      <h3 id="qr-title" style="margin-bottom: 0.5rem;">Scanner pour ouvrir</h3>
+      <p id="qr-url-text" style="font-size: 0.8rem; color: var(--text-muted); word-break: break-all;"></p>
+      <img id="qr-image" src="" alt="QR Code">
+      <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" onclick="closeQr()">Fermer</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/sync-engine.js"></script>
+  <script src="/js/master.js"></script>
+</body>
+</html>

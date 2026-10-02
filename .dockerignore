@@ -1,0 +1,6 @@
+node_modules
+eyes.mov
+uploads/temp/*
+.git
+.gitignore
+*.log
