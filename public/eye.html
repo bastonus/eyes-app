@@ -30,17 +30,10 @@
   <!-- Pure OLED Black Standby Overlay (Zero text, zero notification, 100% pure black) -->
   <div id="standby-overlay" class="active"></div>
 
-  <!-- Discreet Calibration Overlay (Only visible in manual calibration mode) -->
-  <div id="calib-overlay" class="calib-overlay hidden">
-    <div class="calib-pill">
-      <span id="calib-role-label" class="calib-title">📐 Calibrage Tactile</span>
-      <span class="calib-hint">1 doigt: déplacer • 2 doigts: zoom/dézoom</span>
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <button id="btn-calib-validate" class="btn-calib-done">✓ Valider & Écran Noir</button>
-        <button id="btn-calib-reset" class="btn-calib-reset">↺ Recentrer</button>
-      </div>
-    </div>
-  </div>
+  <!-- Corner Framing Validation Button (Disappears completely once validated) -->
+  <button id="btn-validate-framing" class="corner-validate-btn" type="button">
+    ✓ Valider le cadrage
+  </button>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/sync-engine.js"></script>

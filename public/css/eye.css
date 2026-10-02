@@ -76,78 +76,51 @@ html, body {
     transform-origin: center center !important;
   }
 
-  .calib-overlay {
-    top: 50% !important;
-    left: 10px !important;
-    transform: translateY(-50%) rotate(90deg) !important;
-    transform-origin: left center !important;
+  .corner-validate-btn {
+    bottom: 24px;
+    right: 24px;
+    transform: rotate(90deg);
+    transform-origin: bottom right;
+  }
+
+  .corner-validate-btn:active {
+    transform: rotate(90deg) scale(0.94);
   }
 }
 
-/* Discreet Calibration Pill Overlay */
-.calib-overlay {
+/* Discreet Corner Framing Validation Button (Bottom-Right Corner) */
+.corner-validate-btn {
   position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 24px;
+  right: 24px;
   z-index: 100;
-  pointer-events: auto;
-  transition: opacity 0.3s ease;
-}
-.calib-overlay.hidden {
-  display: none !important;
-}
-
-.calib-pill {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
-  background: rgba(15, 17, 23, 0.94);
-  border: 1px solid rgba(255, 85, 0, 0.45);
-  backdrop-filter: blur(16px);
-  padding: 0.55rem 1.1rem;
-  border-radius: 40px;
-  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.9);
-  white-space: nowrap;
-}
-
-.calib-title {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #ffaa55;
-}
-
-.calib-hint {
-  font-size: 0.74rem;
-  color: #a0a6b5;
-}
-
-.btn-calib-done {
-  background: linear-gradient(135deg, #ff5500, #ff2200);
-  border: none;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(18, 22, 32, 0.88);
+  border: 1.5px solid #ff5500;
   color: #ffffff;
-  padding: 0.45rem 1rem;
-  border-radius: 20px;
-  font-size: 0.82rem;
+  font-family: inherit;
+  font-size: 0.95rem;
   font-weight: 700;
+  padding: 0.75rem 1.4rem;
+  border-radius: 40px;
+  box-shadow: 0 4px 22px rgba(255, 85, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(255, 85, 0, 0.3);
-  transition: transform 0.15s ease;
-}
-.btn-calib-done:active {
-  transform: scale(0.96);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: opacity 0.25s ease, transform 0.15s ease;
 }
 
-.btn-calib-reset {
-  background: #202430;
-  border: 1px solid #353c4d;
-  color: #cfd4df;
-  padding: 0.45rem 0.85rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
+.corner-validate-btn:active {
+  transform: scale(0.94);
+  background: rgba(255, 85, 0, 0.95);
 }
-.btn-calib-reset:active {
-  transform: scale(0.96);
+
+.corner-validate-btn.hidden {
+  display: none !important;
 }

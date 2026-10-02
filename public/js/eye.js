@@ -12,14 +12,15 @@
   const eyeAudio = document.getElementById('eye-audio');
   const touchSurface = document.getElementById('touch-surface');
   const standbyOverlay = document.getElementById('standby-overlay');
-  const calibOverlay = document.getElementById('calib-overlay');
-  const calibRoleLabel = document.getElementById('calib-role-label');
-  const btnCalibValidate = document.getElementById('btn-calib-validate');
-  const btnCalibReset = document.getElementById('btn-calib-reset');
+  let btnValidateFraming = document.getElementById('btn-validate-framing');
 
   const sideName = side === 'right' ? 'Œil Droit' : 'Œil Gauche';
-  if (calibRoleLabel) calibRoleLabel.textContent = `📐 Calibrage ${sideName}`;
   document.title = `Dragon Eye (${sideName})`;
+
+  // Framing & Calibration State
+  // Frame at 8.0s corresponds to dragon eye wide open and vibrant (before 4.7s video is black)
+  const FRAMING_TIMESTAMP = 8.0;
+  let isFramingValidated = !isCalibInit && sessionStorage.getItem(`dragon_framing_done_${side}`) === 'true';
 
   // Transform state (Pan & Zoom/Dézoom)
   let transform = {
@@ -29,6 +30,18 @@
     rotation: 0,
     flipX: false
   };
+
+  // Show state
+  let isShowPlaying = false;
+  let showStartTime = null;
+  let showDuration = 94.17;
+  let stopAfterCurrentLoop = false;
+  let lastDriftMs = 0;
+  let lastHardSeekTime = 0;
+  let startupGraceUntil = 0;
+  let wakeLockSentinel = null;
+  let isWakeLockActive = false;
+  let syncAnimationId = null;
 
   // Audio Config & Web Audio API Routing
   let currentAudioFile = '/media/default_audio.mp3';
@@ -165,7 +178,7 @@
     }
   }
 
-  // Fullscreen Landscape & Screen Wake Lock
+  // Fullscreen Landscape, Screen Wake Lock & Brightness
   async function enterFullscreenLandscape() {
     try {
       const docEl = document.documentElement;
@@ -183,6 +196,11 @@
       });
     }
 
+    // Try experimental max screen brightness if supported by browser/device
+    if ('screen' in window && 'brightness' in window.screen) {
+      try { window.screen.brightness = 1.0; } catch (e) {}
+    }
+
     requestWakeLock();
     initWebAudio();
   }
@@ -190,11 +208,13 @@
   async function requestWakeLock() {
     if ('wakeLock' in navigator) {
       try {
-        wakeLockSentinel = await navigator.wakeLock.request('screen');
-        isWakeLockActive = true;
-        wakeLockSentinel.addEventListener('release', () => {
-          isWakeLockActive = false;
-        });
+        if (!wakeLockSentinel || wakeLockSentinel.released) {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+          isWakeLockActive = true;
+          wakeLockSentinel.addEventListener('release', () => {
+            isWakeLockActive = false;
+          });
+        }
       } catch (err) {
         isWakeLockActive = false;
       }
@@ -202,10 +222,17 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && !isWakeLockActive) {
+    if (document.visibilityState === 'visible') {
       requestWakeLock();
     }
   });
+
+  // Permanently maintain Wake Lock active (prevents screen dimming or sleep)
+  setInterval(() => {
+    if (document.visibilityState === 'visible' && !isWakeLockActive) {
+      requestWakeLock();
+    }
+  }, 3000);
 
   // Touch Manipulation: 1 finger Pan, 2 fingers Pinch-to-zoom / Dézoom
   let touchStartX = 0;
@@ -228,22 +255,20 @@
     // Silently ensure fullscreen, landscape and wakeLock on any touch
     enterFullscreenLandscape();
 
+    // If framing is not yet validated and video is not playing, make sure 8s frame is rendered
+    if (!isFramingValidated && !isShowPlaying && Math.abs(video.currentTime - FRAMING_TIMESTAMP) > 0.5) {
+      showFramingFrame();
+    }
+
     const now = Date.now();
     tapTimes.push(now);
     // Keep only taps within 700ms
     tapTimes = tapTimes.filter(t => now - t < 700);
 
-    // Triple tap detected -> Toggle manual calibration mode
+    // Triple tap detected -> Restore framing mode if operator needs to adjust
     if (tapTimes.length >= 3) {
       tapTimes = [];
-      toggleCalibration();
-      return;
-    }
-
-    // 2-finger double tap also toggles calibration mode
-    if (e.touches.length === 2 && tapTimes.length >= 2) {
-      tapTimes = [];
-      toggleCalibration();
+      restoreFramingMode();
       return;
     }
 
@@ -312,38 +337,51 @@
     saveTransform();
   }, { passive: true });
 
-  // Calibration Mode Management
-  function toggleCalibration() {
-    if (isCalibrating) {
-      exitCalibration();
-    } else {
-      enterCalibration();
-    }
-  }
-
-  function enterCalibration() {
-    isCalibrating = true;
-    calibOverlay.classList.remove('hidden');
+  // Framing Mode Display (Dragon eye visible at 8.0s for pan/zoom adjustments)
+  function showFramingFrame() {
+    if (isShowPlaying || isFramingValidated) return;
     standbyOverlay.classList.remove('active');
 
-    // Show eye frame so the user can frame it with fingers
-    if (!isShowPlaying) {
-      video.currentTime = Math.min(3.0, (video.duration || 10) / 2);
-      video.play().then(() => {
-        // Pause shortly after showing first frame if show is idle
+    try {
+      video.currentTime = FRAMING_TIMESTAMP;
+    } catch (e) {}
+
+    // Force video decoder to draw the frame
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
         setTimeout(() => {
-          if (!isShowPlaying && isCalibrating) video.pause();
-        }, 150);
-      }).catch(() => {});
+          if (!isShowPlaying && !isFramingValidated) {
+            video.pause();
+            video.currentTime = FRAMING_TIMESTAMP;
+          }
+        }, 120);
+      }).catch(() => {
+        // Autoplay policy prevented playback without touch gesture;
+        // The first touchstart will render it.
+      });
     }
   }
 
-  function exitCalibration() {
-    isCalibrating = false;
-    calibOverlay.classList.add('hidden');
+  video.addEventListener('loadeddata', () => {
+    if (!isFramingValidated && !isShowPlaying) showFramingFrame();
+  });
+  video.addEventListener('canplay', () => {
+    if (!isFramingValidated && !isShowPlaying) showFramingFrame();
+  });
+
+  // Complete Framing: permanently remove button and switch to 100% pure black OLED
+  function completeFraming() {
+    isFramingValidated = true;
+    sessionStorage.setItem(`dragon_framing_done_${side}`, 'true');
     saveTransform();
 
-    // If show is not currently playing, return to 100% pure black OLED
+    const btn = document.getElementById('btn-validate-framing');
+    if (btn) {
+      btn.classList.add('hidden');
+      btn.remove();
+    }
+
     if (!isShowPlaying) {
       video.pause();
       video.currentTime = 0;
@@ -351,38 +389,45 @@
     }
   }
 
-  btnCalibValidate.addEventListener('click', (e) => {
-    e.stopPropagation();
-    exitCalibration();
-  });
+  // Restore framing mode (e.g. discreet triple-tap emergency adjustment)
+  function restoreFramingMode() {
+    if (isShowPlaying) return;
+    isFramingValidated = false;
+    sessionStorage.removeItem(`dragon_framing_done_${side}`);
 
-  btnCalibReset.addEventListener('click', (e) => {
-    e.stopPropagation();
-    transform.scale = 1.0;
-    transform.posX = 0;
-    transform.posY = 0;
-    transform.rotation = 0;
-    transform.flipX = false;
-    applyTransform();
-    saveTransform();
-  });
+    let btn = document.getElementById('btn-validate-framing');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'btn-validate-framing';
+      btn.className = 'corner-validate-btn';
+      btn.type = 'button';
+      btn.textContent = '✓ Valider le cadrage';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        completeFraming();
+      });
+      document.body.appendChild(btn);
+    } else {
+      btn.classList.remove('hidden');
+    }
 
-  if (isCalibInit) {
-    enterCalibration();
+    showFramingFrame();
   }
 
-  // Show state
-  let isShowPlaying = false;
-  let showStartTime = null;
-  let showDuration = 94.17;
-  let stopAfterCurrentLoop = false;
-  let lastDriftMs = 0;
-  let lastHardSeekTime = 0;
-  let startupGraceUntil = 0;
-  let isCalibrating = false;
-  let wakeLockSentinel = null;
-  let isWakeLockActive = false;
-  let syncAnimationId = null;
+  // Initial Framing State setup
+  if (isFramingValidated) {
+    if (btnValidateFraming) btnValidateFraming.remove();
+    standbyOverlay.classList.add('active');
+  } else {
+    standbyOverlay.classList.remove('active');
+    if (btnValidateFraming) {
+      btnValidateFraming.addEventListener('click', (e) => {
+        e.stopPropagation();
+        completeFraming();
+      });
+    }
+    showFramingFrame();
+  }
 
   // Socket.IO & Sync Engine
   const socket = io();
@@ -471,9 +516,10 @@
     showDuration = duration;
     lastHardSeekTime = 0;
 
-    // Hide calibration overlay and standby veil
-    isCalibrating = false;
-    calibOverlay.classList.add('hidden');
+    // Ensure framing button is permanently removed and standby veil is lifted
+    isFramingValidated = true;
+    const btn = document.getElementById('btn-validate-framing');
+    if (btn) btn.remove();
     standbyOverlay.classList.remove('active');
 
     enterFullscreenLandscape();
