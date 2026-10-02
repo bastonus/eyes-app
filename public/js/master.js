@@ -114,9 +114,15 @@
     updateClientTelemetry(client);
   });
 
+  function getLatestClientBySide(clients, targetSide) {
+    const matches = clients.filter(c => c.side === targetSide);
+    if (!matches || matches.length === 0) return null;
+    return matches.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0];
+  }
+
   function updateClientsDisplay(clients) {
-    const left = clients.find(c => c.side === 'left');
-    const right = clients.find(c => c.side === 'right');
+    const left = getLatestClientBySide(clients, 'left');
+    const right = getLatestClientBySide(clients, 'right');
 
     renderEyeCard(cardLeftEye, badgeLeftEye, statusLeftEye, driftLeftEye, wakelockLeftEye, left);
     renderEyeCard(cardRightEye, badgeRightEye, statusRightEye, driftRightEye, wakelockRightEye, right);
@@ -137,26 +143,28 @@
     badge.className = 'badge badge-success';
     badge.innerHTML = '<span class="badge-dot"></span> En ligne';
 
-    statusEl.textContent = client.state === 'playing' ? '🟢 En lecture' : '🟡 En veille';
+    const isPlaying = client.state === 'playing';
+    statusEl.textContent = isPlaying ? '🟢 En lecture' : '🟡 En veille';
     
-    const d = client.driftMs || 0;
-    driftEl.textContent = `${d > 0 ? '+' : ''}${d} ms`;
+    const d = isPlaying ? (client.driftMs || 0) : 0;
+    driftEl.textContent = isPlaying ? `${d > 0 ? '+' : ''}${d} ms` : '0 ms (Veille)';
     driftEl.className = 'telemetry-val ' + (Math.abs(d) < 40 ? 'sync-ok' : Math.abs(d) < 120 ? 'sync-warn' : 'sync-err');
 
     wakelockEl.textContent = client.wakeLock ? '✅ Actif' : '⚠️ Inactif';
   }
 
   function updateClientTelemetry(client) {
+    const isPlaying = client.state === 'playing';
+    const d = isPlaying ? (client.driftMs || 0) : 0;
+
     if (client.side === 'left') {
-      statusLeftEye.textContent = client.state === 'playing' ? '🟢 En lecture' : '🟡 En veille';
-      const d = client.driftMs || 0;
-      driftLeftEye.textContent = `${d > 0 ? '+' : ''}${d} ms`;
+      statusLeftEye.textContent = isPlaying ? '🟢 En lecture' : '🟡 En veille';
+      driftLeftEye.textContent = isPlaying ? `${d > 0 ? '+' : ''}${d} ms` : '0 ms (Veille)';
       driftLeftEye.className = 'telemetry-val ' + (Math.abs(d) < 40 ? 'sync-ok' : Math.abs(d) < 120 ? 'sync-warn' : 'sync-err');
       wakelockLeftEye.textContent = client.wakeLock ? '✅ Actif' : '⚠️ Inactif';
     } else if (client.side === 'right') {
-      statusRightEye.textContent = client.state === 'playing' ? '🟢 En lecture' : '🟡 En veille';
-      const d = client.driftMs || 0;
-      driftRightEye.textContent = `${d > 0 ? '+' : ''}${d} ms`;
+      statusRightEye.textContent = isPlaying ? '🟢 En lecture' : '🟡 En veille';
+      driftRightEye.textContent = isPlaying ? `${d > 0 ? '+' : ''}${d} ms` : '0 ms (Veille)';
       driftRightEye.className = 'telemetry-val ' + (Math.abs(d) < 40 ? 'sync-ok' : Math.abs(d) < 120 ? 'sync-warn' : 'sync-err');
       wakelockRightEye.textContent = client.wakeLock ? '✅ Actif' : '⚠️ Inactif';
     }

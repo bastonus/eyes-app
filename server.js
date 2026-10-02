@@ -241,6 +241,16 @@ io.on('connection', (socket) => {
 
   // 2. Client registration (eye left, eye right, master)
   socket.on('client:register', (data) => {
+    // Evict older socket entries for the same role and side to prevent stale ghosts
+    if (data.side) {
+      for (const [existingId, existingClient] of connectedClients.entries()) {
+        if (existingId !== socket.id && existingClient.role === 'eye' && existingClient.side === data.side) {
+          console.log(`[Client] Evicting previous connection for ${data.side} (${existingId})`);
+          connectedClients.delete(existingId);
+        }
+      }
+    }
+
     const clientData = {
       id: socket.id,
       role: data.role || 'observer', // 'left', 'right', 'master'
@@ -316,7 +326,7 @@ io.on('connection', (socket) => {
 
   // START SHOW
   socket.on('master:start_show', () => {
-    const leadTimeMs = 600; // 600ms network buffer lead
+    const leadTimeMs = 1500; // 1500ms network buffer lead for reliable dual-phone Wi-Fi sync
     const startTime = Date.now() + leadTimeMs;
 
     appState.status = 'playing';
@@ -362,6 +372,13 @@ io.on('connection', (socket) => {
     appState.status = 'idle';
     appState.startTime = null;
     appState.stopAfterCurrent = false;
+
+    connectedClients.forEach(c => {
+      c.state = 'connected';
+      c.currentTime = 0;
+      c.driftMs = 0;
+    });
+    broadcastClients();
 
     console.log('[Show] Emergency stop triggered.');
 

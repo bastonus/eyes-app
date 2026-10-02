@@ -30,17 +30,6 @@
     flipX: false
   };
 
-  // Show state
-  let isShowPlaying = false;
-  let showStartTime = null;
-  let showDuration = 94.17;
-  let stopAfterCurrentLoop = false;
-  let lastDriftMs = 0;
-  let isCalibrating = false;
-  let wakeLockSentinel = null;
-  let isWakeLockActive = false;
-  let syncAnimationId = null;
-
   // Audio Config & Web Audio API Routing
   let currentAudioFile = '/media/default_audio.mp3';
   let currentAudioConfig = {
@@ -338,10 +327,23 @@
     enterCalibration();
   }
 
+  // Show state
+  let isShowPlaying = false;
+  let showStartTime = null;
+  let showDuration = 94.17;
+  let stopAfterCurrentLoop = false;
+  let lastDriftMs = 0;
+  let lastHardSeekTime = 0;
+  let startupGraceUntil = 0;
+  let isCalibrating = false;
+  let wakeLockSentinel = null;
+  let isWakeLockActive = false;
+  let syncAnimationId = null;
+
   // Socket.IO & Sync Engine
   const socket = io();
   const syncEngine = new DragonSyncClient(socket);
-  syncEngine.start(2500);
+  syncEngine.start(1500);
 
   socket.on('connect', () => {
     socket.emit('client:register', {
@@ -352,7 +354,10 @@
     enterFullscreenLandscape();
   });
 
-  socket.on('show:state', ({ appState }) => {
+  socket.on('show:state', ({ appState, serverTime }) => {
+    if (serverTime) {
+      syncEngine.seedOffset(serverTime);
+    }
     showDuration = appState.videoDuration || 94.17;
     if (appState.audioConfig) {
       currentAudioConfig = appState.audioConfig;
@@ -423,6 +428,7 @@
     isShowPlaying = true;
     showStartTime = startTime;
     showDuration = duration;
+    lastHardSeekTime = 0;
 
     // Hide calibration overlay and standby veil
     isCalibrating = false;
@@ -442,11 +448,14 @@
     const serverNow = syncEngine.now();
     const waitMs = startTime - serverNow;
 
+    // Grace period gives mobile decoders ~1.8s of smooth start without any hard seeks
+    startupGraceUntil = Date.now() + Math.max(0, waitMs) + 1800;
+
     if (waitMs > 0) {
       video.currentTime = 0;
       if (currentAudioConfig.playOnEyes) eyeAudio.currentTime = 0;
       setTimeout(() => {
-        executePlay();
+        if (isShowPlaying) executePlay();
       }, waitMs);
     } else {
       const elapsed = Math.abs(waitMs) / 1000;
@@ -468,7 +477,7 @@
     runSyncLoop();
   }
 
-  // CONTINUOUS PRECISION SYNC LOOP
+  // CONTINUOUS PRECISION SYNC LOOP (Smooth rate-steering, zero seek-storms)
   function runSyncLoop() {
     if (!isShowPlaying) return;
 
@@ -485,26 +494,61 @@
         return;
       }
 
-      // 1. Sync Video
-      const drift = video.currentTime - targetTime;
+      // 1. Sync Video with circular wrap-around protection
+      let drift = video.currentTime - targetTime;
+      if (drift > showDuration / 2) {
+        drift -= showDuration;
+      } else if (drift < -showDuration / 2) {
+        drift += showDuration;
+      }
+
       lastDriftMs = Math.round(drift * 1000);
 
-      if (Math.abs(drift) > 0.18) {
-        video.currentTime = targetTime;
-        video.playbackRate = 1.0;
-      } else if (drift > 0.035) {
-        video.playbackRate = 0.96;
-      } else if (drift < -0.035) {
-        video.playbackRate = 1.04;
+      const now = Date.now();
+      const isStartingUp = now < startupGraceUntil;
+
+      // Only perform drift corrections after the startup grace window
+      if (!isStartingUp) {
+        // Hard seek ONLY when drift is severe (> 1.2s), video is not already seeking, decoder is ready, and cooldown passed
+        if (Math.abs(drift) > 1.20 && !video.seeking && video.readyState >= 2 && (now - lastHardSeekTime > 2000)) {
+          lastHardSeekTime = now;
+          video.currentTime = targetTime;
+          video.playbackRate = 1.0;
+        }
+        // Smooth multi-tier playbackRate adjustments (seamless, zero stuttering or aborted requests)
+        else if (drift > 0.40) {
+          video.playbackRate = 0.88; // Ahead by >400ms, slow down
+        } else if (drift > 0.12) {
+          video.playbackRate = 0.94; // Ahead by 120-400ms, slow down gently
+        } else if (drift > 0.025) {
+          video.playbackRate = 0.98; // Ahead by 25-120ms, micro adjust
+        } else if (drift < -0.40) {
+          video.playbackRate = 1.12; // Behind by >400ms, speed up
+        } else if (drift < -0.12) {
+          video.playbackRate = 1.06; // Behind by 120-400ms, speed up gently
+        } else if (drift < -0.025) {
+          video.playbackRate = 1.02; // Behind by 25-120ms, micro adjust
+        } else {
+          video.playbackRate = 1.0;  // Near-perfect lock (< 25ms)!
+        }
       } else {
         video.playbackRate = 1.0;
       }
 
       // 2. Sync Audio (if enabled on eyes)
-      if (currentAudioConfig.playOnEyes && !eyeAudio.paused) {
-        const audioDrift = eyeAudio.currentTime - targetTime;
-        if (Math.abs(audioDrift) > 0.08) {
+      if (currentAudioConfig.playOnEyes && !eyeAudio.paused && !isStartingUp) {
+        let audioDrift = eyeAudio.currentTime - targetTime;
+        if (audioDrift > showDuration / 2) audioDrift -= showDuration;
+        else if (audioDrift < -showDuration / 2) audioDrift += showDuration;
+
+        if (Math.abs(audioDrift) > 1.20 && !eyeAudio.seeking && (now - lastHardSeekTime > 2000)) {
           eyeAudio.currentTime = targetTime;
+        } else if (audioDrift > 0.04) {
+          eyeAudio.playbackRate = 0.96;
+        } else if (audioDrift < -0.04) {
+          eyeAudio.playbackRate = 1.04;
+        } else {
+          eyeAudio.playbackRate = 1.0;
         }
       }
     }
@@ -518,9 +562,13 @@
 
     video.pause();
     video.currentTime = 0;
+    video.playbackRate = 1.0;
 
     eyeAudio.pause();
     eyeAudio.currentTime = 0;
+    eyeAudio.playbackRate = 1.0;
+
+    lastDriftMs = 0;
 
     // Return to 100% pure black OLED
     standbyOverlay.classList.add('active');
@@ -532,12 +580,12 @@
       socket.emit('eye:telemetry', {
         side: side,
         currentTime: video.currentTime,
-        driftMs: lastDriftMs,
+        driftMs: isShowPlaying ? lastDriftMs : 0,
         state: isShowPlaying ? 'playing' : 'idle',
         wakeLock: isWakeLockActive,
         fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement)
       });
     }
-  }, 500);
+  }, 400);
 
 })();
