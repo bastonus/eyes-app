@@ -1,16 +1,21 @@
-/* Eye View Specific Styles (OLED Optimized) */
+/* Eye View Specific Styles (OLED Pure Black Optimized) */
 html, body {
   background-color: #000000 !important;
   width: 100%;
   height: 100%;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   position: fixed;
   inset: 0;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
+/* Viewport Container for OLED Video */
 #viewport-container {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
@@ -21,223 +26,128 @@ html, body {
   overflow: hidden;
 }
 
+/* Eye Video Element (Contained with Pure Black Borders when Dezoomed) */
 #eye-video {
   position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background-color: #000000;
   transform-origin: center center;
   will-change: transform;
-  object-fit: contain;
   pointer-events: none;
-  max-width: none;
-  max-height: none;
 }
 
 /* Touch manipulation area */
 #touch-surface {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 10;
-  cursor: grab;
-}
-#touch-surface:active {
-  cursor: grabbing;
-}
-#touch-surface.locked {
-  pointer-events: none;
+  z-index: 60;
+  background: transparent;
+  touch-action: none;
 }
 
-/* Standby / Idle overlay */
+/* Standby / Idle overlay: 100% pure black OLED (0 text, 0 notification) */
 #standby-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background-color: #000000;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000000 !important;
+  z-index: 50;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.5s ease;
+  transition: opacity 0.25s ease;
 }
 #standby-overlay.active {
   opacity: 1;
-  pointer-events: auto;
-}
-.standby-dragon-icon {
-  font-size: 3rem;
-  opacity: 0.3;
-  animation: pulseDragon 3s infinite ease-in-out;
-}
-@keyframes pulseDragon {
-  0%, 100% { transform: scale(1); opacity: 0.2; }
-  50% { transform: scale(1.08); opacity: 0.45; }
-}
-.standby-text {
-  color: #555e70;
-  font-size: 0.9rem;
-  letter-spacing: 1px;
-  text-transform: uppercase;
 }
 
-/* Top Floating Bar (Connection, Fullscreen, Calibration toggle) */
-#top-bar {
+/* Force Landscape via CSS Rotation if Device is in Portrait Mode */
+@media screen and (orientation: portrait) {
+  #viewport-container {
+    width: 100vh !important;
+    height: 100vw !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) rotate(90deg) !important;
+    transform-origin: center center !important;
+  }
+
+  .calib-overlay {
+    top: 50% !important;
+    left: 10px !important;
+    transform: translateY(-50%) rotate(90deg) !important;
+    transform-origin: left center !important;
+  }
+}
+
+/* Discreet Calibration Pill Overlay */
+.calib-overlay {
   position: fixed;
-  top: 12px;
-  left: 12px;
-  right: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 100;
-  transition: opacity 0.4s ease, transform 0.4s ease;
-}
-#top-bar.hidden {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-20px);
-}
-
-.top-pill {
-  background: rgba(15, 17, 23, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(12px);
-  padding: 0.45rem 0.9rem;
-  border-radius: 30px;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.8rem;
-  color: #d1d5db;
-}
-
-/* Secret unlock trigger button when locked */
-#secret-unlock-trigger {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 70px;
-  height: 70px;
-  z-index: 999;
-  cursor: pointer;
-  opacity: 0.05; /* Barely perceptible, totally invisible during show */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-}
-#secret-unlock-trigger:hover {
-  opacity: 0.4;
-}
-
-/* Calibration Drawer / Modal */
-#calibration-panel {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(10, 12, 16, 0.94);
-  border-top: 1px solid rgba(255, 85, 0, 0.3);
-  backdrop-filter: blur(16px);
-  padding: 1.4rem 1.2rem;
-  z-index: 200;
-  border-top-left-radius: 24px;
-  border-top-right-radius: 24px;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.9);
-  max-height: 80vh;
-  overflow-y: auto;
-  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
-}
-
-#calibration-panel.collapsed {
-  transform: translateY(105%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.calibration-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.2rem;
-}
-
-.calibration-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #ffffff;
-}
-
-.control-row {
-  margin-bottom: 0.9rem;
-}
-
-.control-label-group {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  margin-bottom: 0.35rem;
-}
-
-.control-slider {
-  width: 100%;
-  height: 8px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: #1e2230;
-  border-radius: 5px;
-  outline: none;
-}
-.control-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 0 10px var(--primary-glow);
-  cursor: pointer;
-}
-
-.preset-buttons {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  margin-bottom: 1.2rem;
-  flex-wrap: wrap;
-}
-
-.actions-footer {
-  display: flex;
-  gap: 0.8rem;
-  margin-top: 1.2rem;
-}
-
-/* Notification Toast */
-#toast {
-  position: fixed;
-  bottom: 20px;
+  top: 16px;
   left: 50%;
-  transform: translateX(-50%) translateY(100px);
-  background: rgba(20, 23, 31, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-  padding: 0.7rem 1.4rem;
-  border-radius: 30px;
-  font-size: 0.88rem;
-  z-index: 1000;
-  transition: transform 0.3s ease, opacity 0.3s ease;
-  opacity: 0;
-  pointer-events: none;
-  box-shadow: 0 5px 25px rgba(0, 0, 0, 0.7);
+  transform: translateX(-50%);
+  z-index: 100;
+  pointer-events: auto;
+  transition: opacity 0.3s ease;
 }
-#toast.active {
-  transform: translateX(-50%) translateY(0);
-  opacity: 1;
+.calib-overlay.hidden {
+  display: none !important;
+}
+
+.calib-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  background: rgba(15, 17, 23, 0.94);
+  border: 1px solid rgba(255, 85, 0, 0.45);
+  backdrop-filter: blur(16px);
+  padding: 0.55rem 1.1rem;
+  border-radius: 40px;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+.calib-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #ffaa55;
+}
+
+.calib-hint {
+  font-size: 0.74rem;
+  color: #a0a6b5;
+}
+
+.btn-calib-done {
+  background: linear-gradient(135deg, #ff5500, #ff2200);
+  border: none;
+  color: #ffffff;
+  padding: 0.45rem 1rem;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(255, 85, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+.btn-calib-done:active {
+  transform: scale(0.96);
+}
+
+.btn-calib-reset {
+  background: #202430;
+  border: 1px solid #353c4d;
+  color: #cfd4df;
+  padding: 0.45rem 0.85rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-calib-reset:active {
+  transform: scale(0.96);
 }

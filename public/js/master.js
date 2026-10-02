@@ -37,7 +37,12 @@
   const selectAudio = document.getElementById('select-audio');
   const audioDropzone = document.getElementById('audio-dropzone');
   const inputAudioFile = document.getElementById('input-audio-file');
-  const radioAudioTargets = document.querySelectorAll('input[name="audio-target"]');
+  const checkAudioMaster = document.getElementById('check-audio-master');
+  const checkAudioEyes = document.getElementById('check-audio-eyes');
+  const stereoModeContainer = document.getElementById('stereo-mode-container');
+  const radioStereoModes = document.querySelectorAll('input[name="stereo-mode"]');
+  const chipStereoSplit = document.getElementById('chip-stereo-split');
+  const chipStereoCombined = document.getElementById('chip-stereo-combined');
 
   // DOM Elements - Video Upload
   const videoDropzone = document.getElementById('video-dropzone');
@@ -56,7 +61,11 @@
   let isStoppingAfterLoop = false;
   let stopTargetTime = null;
   let timelineTimer = null;
-  let audioTarget = 'master'; // 'master' or 'eyes'
+  let audioConfig = {
+    playOnMaster: true,
+    playOnEyes: false,
+    splitStereo: true
+  };
 
   // Socket Connection
   socket.on('connect', () => {
@@ -82,6 +91,10 @@
       infoDuration.textContent = showDuration.toFixed(1) + ' s';
       if (data.appState.videoInfo) {
         infoResolution.textContent = `${data.appState.videoInfo.width} x ${data.appState.videoInfo.height}`;
+      }
+      if (data.appState.audioConfig) {
+        audioConfig = Object.assign(audioConfig, data.appState.audioConfig);
+        applyAudioConfigToUI();
       }
       updateClientsDisplay(data.clients || []);
       if (data.appState.status === 'playing') {
@@ -209,8 +222,10 @@
   }
 
   function playMasterAudio() {
-    if (audioTarget === 'master') {
+    if (audioConfig.playOnMaster) {
       masterAudio.play().catch(err => console.warn('Master audio play error:', err));
+    } else {
+      masterAudio.pause();
     }
   }
 
@@ -262,7 +277,7 @@
         }
 
         // Keep master audio in sync
-        if (audioTarget === 'master' && !masterAudio.paused) {
+        if (audioConfig.playOnMaster && !masterAudio.paused) {
           const audioDrift = masterAudio.currentTime - currentPos;
           if (Math.abs(audioDrift) > 0.15) {
             masterAudio.currentTime = currentPos;
@@ -314,16 +329,59 @@
     audioFileName.textContent = activeAudio.split('/').pop();
   });
 
-  radioAudioTargets.forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      audioTarget = e.target.value;
-      document.querySelectorAll('.radio-chip').forEach(c => c.classList.remove('selected'));
-      e.target.closest('.radio-chip').classList.add('selected');
-      socket.emit('master:set_audio_target', audioTarget);
-      if (audioTarget !== 'master') {
-        masterAudio.pause();
+  function applyAudioConfigToUI() {
+    if (checkAudioMaster) checkAudioMaster.checked = !!audioConfig.playOnMaster;
+    if (checkAudioEyes) checkAudioEyes.checked = !!audioConfig.playOnEyes;
+    if (stereoModeContainer) stereoModeContainer.style.display = audioConfig.playOnEyes ? 'block' : 'none';
+
+    radioStereoModes.forEach(r => {
+      if (r.value === 'split') {
+        r.checked = audioConfig.splitStereo;
+      } else if (r.value === 'combined') {
+        r.checked = !audioConfig.splitStereo;
       }
     });
+
+    if (chipStereoSplit) chipStereoSplit.classList.toggle('selected', audioConfig.splitStereo);
+    if (chipStereoCombined) chipStereoCombined.classList.toggle('selected', !audioConfig.splitStereo);
+  }
+
+  function sendAudioConfigUpdate() {
+    const splitRadio = document.querySelector('input[name="stereo-mode"]:checked');
+    audioConfig.playOnMaster = checkAudioMaster ? checkAudioMaster.checked : true;
+    audioConfig.playOnEyes = checkAudioEyes ? checkAudioEyes.checked : false;
+    audioConfig.splitStereo = splitRadio ? splitRadio.value === 'split' : true;
+
+    if (stereoModeContainer) stereoModeContainer.style.display = audioConfig.playOnEyes ? 'block' : 'none';
+
+    if (chipStereoSplit) chipStereoSplit.classList.toggle('selected', audioConfig.splitStereo);
+    if (chipStereoCombined) chipStereoCombined.classList.toggle('selected', !audioConfig.splitStereo);
+
+    socket.emit('master:set_audio_config', audioConfig);
+
+    if (!audioConfig.playOnMaster && !masterAudio.paused) {
+      masterAudio.pause();
+    }
+  }
+
+  if (checkAudioMaster) checkAudioMaster.addEventListener('change', sendAudioConfigUpdate);
+  if (checkAudioEyes) checkAudioEyes.addEventListener('change', sendAudioConfigUpdate);
+  radioStereoModes.forEach(r => {
+    r.addEventListener('change', () => {
+      document.querySelectorAll('#stereo-mode-container .radio-chip').forEach(c => c.classList.remove('selected'));
+      r.closest('.radio-chip').classList.add('selected');
+      sendAudioConfigUpdate();
+    });
+  });
+
+  socket.on('audio:config_updated', ({ audioConfig: newCfg }) => {
+    if (newCfg) {
+      audioConfig = Object.assign(audioConfig, newCfg);
+      applyAudioConfigToUI();
+      if (!audioConfig.playOnMaster && !masterAudio.paused) {
+        masterAudio.pause();
+      }
+    }
   });
 
   // Audio Upload
