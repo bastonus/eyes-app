@@ -3,6 +3,17 @@
  * Pure Black OLED Standby • Fullscreen Landscape • Tactile Pan & Dézoom • Synchronized Video & Split Stereo Audio
  */
 (function() {
+  // 1. Initialize Socket.IO & Sync Engine immediately at script start
+  const socket = io({
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 2000,
+    timeout: 10000
+  });
+  const syncEngine = new DragonSyncClient(socket);
+  syncEngine.start(1500);
+
   const urlParams = new URLSearchParams(window.location.search);
   const isCalibInit = urlParams.get('calib') === '1';
 
@@ -18,23 +29,38 @@
   const btnSelectLeft = document.getElementById('btn-select-left');
   const btnSelectRight = document.getElementById('btn-select-right');
 
-  // Eye Side resolution (URL parameter > localStorage > User Modal Selection)
-  let rawSide = urlParams.get('side');
-  if (rawSide) {
-    rawSide = rawSide.toLowerCase();
-    localStorage.setItem('dragon_eye_side', rawSide);
-  } else {
-    rawSide = localStorage.getItem('dragon_eye_side');
+  // Eye Side resolution: ALWAYS guaranteed to have a valid side ('left' or 'right')
+  let rawSide = (urlParams.get('side') || localStorage.getItem('dragon_eye_side') || 'left').toLowerCase();
+  let side = (rawSide === 'right') ? 'right' : 'left';
+  localStorage.setItem('dragon_eye_side', side);
+  let sideName = side === 'right' ? 'Œil Droit' : 'Œil Gauche';
+  document.title = `Dragon Eye (${sideName})`;
+
+  // Register client with server and master console immediately
+  function registerWithServer() {
+    if (socket && socket.connected) {
+      socket.emit('client:register', {
+        role: 'eye',
+        side: side,
+        deviceName: `${sideName} (${navigator.platform || 'Mobile'})`
+      });
+      console.log(`[Socket] 👁️ Connecté et enregistré en régie: ${sideName}`);
+    }
   }
 
-  let side = rawSide === 'right' || rawSide === 'left' ? rawSide : null;
-  let sideName = side === 'right' ? 'Œil Droit' : (side === 'left' ? 'Œil Gauche' : 'Œil non configuré');
-  document.title = side ? `Dragon Eye (${sideName})` : 'Dragon Eye - Sélection';
+  socket.on('connect', () => {
+    registerWithServer();
+    enterFullscreenLandscape();
+  });
+
+  if (socket.connected) {
+    registerWithServer();
+  }
 
   // Framing & Lock State
   // Frame at 8.0s corresponds to dragon eye wide open and vibrant
   const FRAMING_TIMESTAMP = 8.0;
-  let isFramingLocked = !isCalibInit && side ? (sessionStorage.getItem(`dragon_framing_locked_${side}`) === 'true') : false;
+  let isFramingLocked = !isCalibInit && (sessionStorage.getItem(`dragon_framing_locked_${side}`) === 'true');
   let cadenaTimeout = null;
 
   // Transform state (Pan & Zoom/Dézoom)
@@ -78,28 +104,27 @@
 
   // Storage key helper
   function getStorageKey() {
-    return `dragon_calib_${side || 'default'}`;
+    return `dragon_calib_${side}`;
   }
 
   function loadSavedCalibration() {
-    if (!side) return;
-    const savedCalib = localStorage.getItem(getStorageKey());
-    if (savedCalib) {
-      try {
+    try {
+      const savedCalib = localStorage.getItem(getStorageKey());
+      if (savedCalib) {
         transform = Object.assign(transform, JSON.parse(savedCalib));
         applyTransform();
-      } catch (e) {
-        console.warn('Failed to parse saved calibration:', e);
       }
+    } catch (e) {
+      console.warn('Failed to parse saved calibration:', e);
     }
   }
+  loadSavedCalibration();
 
   // Set initial video source
   let videoSrc = side === 'right' ? '/media/right_eye.mp4' : '/media/left_eye.mp4';
   
   // Asynchronously ensure media is 100% cached locally before show
   async function ensureMediaCached(vUrl, aUrl, version = '1') {
-    if (!side) return;
     try {
       currentMediaVersion = String(version);
       
@@ -147,7 +172,7 @@
 
   function saveTransform() {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(transform));
+      localStorage.setItem(getStorageKey(), JSON.stringify(transform));
     } catch (e) {
       console.warn('Could not save calibration:', e);
     }
@@ -506,51 +531,37 @@
     }
   }
 
-  // Handle Side Modal or Direct Init
-  if (!side) {
+  // Allow explicit side choice via modal if requested or first open
+  if (!urlParams.get('side') && !localStorage.getItem('dragon_eye_side_confirmed')) {
     if (sideModal) sideModal.classList.remove('hidden');
-    if (btnSelectLeft) {
-      btnSelectLeft.addEventListener('click', (e) => {
-        e.stopPropagation();
-        chooseSide('left');
-        enterFullscreenLandscape();
-      });
-    }
-    if (btnSelectRight) {
-      btnSelectRight.addEventListener('click', (e) => {
-        e.stopPropagation();
-        chooseSide('right');
-        enterFullscreenLandscape();
-      });
-    }
+  }
+
+  if (btnSelectLeft) {
+    btnSelectLeft.addEventListener('click', (e) => {
+      e.stopPropagation();
+      localStorage.setItem('dragon_eye_side_confirmed', 'true');
+      chooseSide('left');
+      enterFullscreenLandscape();
+    });
+  }
+  if (btnSelectRight) {
+    btnSelectRight.addEventListener('click', (e) => {
+      e.stopPropagation();
+      localStorage.setItem('dragon_eye_side_confirmed', 'true');
+      chooseSide('right');
+      enterFullscreenLandscape();
+    });
+  }
+
+  // Initial Framing State setup
+  if (isFramingLocked) {
+    lockFraming();
   } else {
-    loadSavedCalibration();
-    ensureMediaCached(videoSrc, currentAudioFile, currentMediaVersion);
-    if (isFramingLocked) {
-      lockFraming();
-    } else {
-      unlockFraming();
-    }
+    unlockFraming();
   }
 
   // Check initial fullscreen state
   updateFullscreenUI();
-
-  // Socket.IO & Sync Engine
-  const socket = io();
-  const syncEngine = new DragonSyncClient(socket);
-  syncEngine.start(1500);
-
-  socket.on('connect', () => {
-    if (side) {
-      socket.emit('client:register', {
-        role: 'eye',
-        side: side,
-        deviceName: `${sideName} (${navigator.platform || 'Mobile'})`
-      });
-    }
-    enterFullscreenLandscape();
-  });
 
   socket.on('show:state', ({ appState, serverTime }) => {
     if (serverTime) {
