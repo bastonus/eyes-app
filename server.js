@@ -68,6 +68,11 @@ const appState = {
   stopAfterCurrent: false,
   activeAudio: '/media/default_audio.mp3',
   audioTarget: 'master', // 'master' | 'eyes' | 'both'
+  audioConfig: {
+    playOnMaster: true,
+    playOnEyes: false,
+    splitStereo: true // true: canal G sur oeil gauche, D sur oeil droit; false: audio complete sur les 2
+  },
   videoInfo: {
     width: 2048,
     height: 1716,
@@ -280,7 +285,33 @@ io.on('connection', (socket) => {
 
   socket.on('master:set_audio_target', (target) => {
     appState.audioTarget = target;
+    if (target === 'master') {
+      appState.audioConfig.playOnMaster = true;
+      appState.audioConfig.playOnEyes = false;
+    } else if (target === 'eyes') {
+      appState.audioConfig.playOnMaster = false;
+      appState.audioConfig.playOnEyes = true;
+    } else if (target === 'both') {
+      appState.audioConfig.playOnMaster = true;
+      appState.audioConfig.playOnEyes = true;
+    }
     io.emit('audio:target_updated', { audioTarget: target });
+    io.emit('audio:config_updated', { audioConfig: appState.audioConfig });
+  });
+
+  socket.on('master:set_audio_config', (cfg) => {
+    if (cfg && typeof cfg === 'object') {
+      appState.audioConfig = {
+        playOnMaster: Boolean(cfg.playOnMaster),
+        playOnEyes: Boolean(cfg.playOnEyes),
+        splitStereo: cfg.splitStereo !== false
+      };
+      appState.audioTarget = (appState.audioConfig.playOnMaster && appState.audioConfig.playOnEyes) ? 'both'
+        : appState.audioConfig.playOnEyes ? 'eyes' : 'master';
+
+      console.log('[Audio] Config updated:', appState.audioConfig);
+      io.emit('audio:config_updated', { audioConfig: appState.audioConfig });
+    }
   });
 
   // START SHOW
@@ -301,6 +332,7 @@ io.on('connection', (socket) => {
       loop: appState.loop,
       audioFile: appState.activeAudio,
       audioTarget: appState.audioTarget,
+      audioConfig: appState.audioConfig,
       videoInfo: appState.videoInfo
     });
   });

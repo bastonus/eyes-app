@@ -158,16 +158,38 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">Diffusion du son :</label>
-            <div class="radio-group">
-              <label class="radio-chip selected">
-                <input type="radio" name="audio-target" value="master" checked>
-                <span>Sur cet appareil Maître (Bluetooth)</span>
+            <label class="form-label">🔊 Diffusion & Destinations Audio :</label>
+            <div class="audio-destinations-box">
+              <label class="custom-checkbox-row">
+                <input type="checkbox" id="check-audio-master" checked>
+                <div class="checkbox-content">
+                  <span class="checkbox-title">Appareil Maître (Régie / Enceinte Bluetooth)</span>
+                  <span class="checkbox-desc">Joue le son en direct synchronisé depuis cet appareil.</span>
+                </div>
               </label>
-              <label class="radio-chip">
-                <input type="radio" name="audio-target" value="eyes">
-                <span>Sur les téléphones en stéréo</span>
+
+              <label class="custom-checkbox-row">
+                <input type="checkbox" id="check-audio-eyes">
+                <div class="checkbox-content">
+                  <span class="checkbox-title">Téléphones des Yeux</span>
+                  <span class="checkbox-desc">Diffuse le son directement depuis les haut-parleurs des téléphones.</span>
+                </div>
               </label>
+
+              <!-- Sous-options Stéréo pour les Yeux -->
+              <div id="stereo-mode-container" class="stereo-mode-subgroup" style="display: none;">
+                <label class="subgroup-label">Mode Stéréo sur les Téléphones :</label>
+                <div class="radio-group" style="margin-top: 0.4rem;">
+                  <label class="radio-chip selected" id="chip-stereo-split">
+                    <input type="radio" name="stereo-mode" value="split" checked>
+                    <span>🔀 Canaux séparés (G sur œil gauche, D sur œil droit)</span>
+                  </label>
+                  <label class="radio-chip" id="chip-stereo-combined">
+                    <input type="radio" name="stereo-mode" value="combined">
+                    <span>🔁 Piste complète (Stéréo sur les deux yeux)</span>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
