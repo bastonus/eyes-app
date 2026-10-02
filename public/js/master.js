@@ -13,12 +13,16 @@
   const statusLeftEye = document.getElementById('status-left-eye');
   const driftLeftEye = document.getElementById('drift-left-eye');
   const wakelockLeftEye = document.getElementById('wakelock-left-eye');
+  const cacheLeftEye = document.getElementById('cache-left-eye');
 
   const cardRightEye = document.getElementById('card-right-eye');
   const badgeRightEye = document.getElementById('badge-right-eye');
   const statusRightEye = document.getElementById('status-right-eye');
   const driftRightEye = document.getElementById('drift-right-eye');
   const wakelockRightEye = document.getElementById('wakelock-right-eye');
+  const cacheRightEye = document.getElementById('cache-right-eye');
+
+  const masterMediaCache = new DragonMediaCache();
 
   // DOM Elements - Show Controls
   const btnStartShow = document.getElementById('btn-start-show');
@@ -124,11 +128,11 @@
     const left = getLatestClientBySide(clients, 'left');
     const right = getLatestClientBySide(clients, 'right');
 
-    renderEyeCard(cardLeftEye, badgeLeftEye, statusLeftEye, driftLeftEye, wakelockLeftEye, left);
-    renderEyeCard(cardRightEye, badgeRightEye, statusRightEye, driftRightEye, wakelockRightEye, right);
+    renderEyeCard(cardLeftEye, badgeLeftEye, statusLeftEye, driftLeftEye, wakelockLeftEye, cacheLeftEye, left);
+    renderEyeCard(cardRightEye, badgeRightEye, statusRightEye, driftRightEye, wakelockRightEye, cacheRightEye, right);
   }
 
-  function renderEyeCard(card, badge, statusEl, driftEl, wakelockEl, client) {
+  function renderEyeCard(card, badge, statusEl, driftEl, wakelockEl, cacheEl, client) {
     if (!client) {
       card.className = 'eye-status-card disconnected';
       badge.className = 'badge badge-danger';
@@ -136,6 +140,7 @@
       statusEl.textContent = 'Non connecté';
       driftEl.textContent = '--';
       wakelockEl.textContent = '--';
+      if (cacheEl) cacheEl.textContent = '--';
       return;
     }
 
@@ -151,22 +156,57 @@
     driftEl.className = 'telemetry-val ' + (Math.abs(d) < 40 ? 'sync-ok' : Math.abs(d) < 120 ? 'sync-warn' : 'sync-err');
 
     wakelockEl.textContent = client.wakeLock ? '✅ Actif' : '⚠️ Inactif';
+
+    if (cacheEl) {
+      if (client.cached) {
+        cacheEl.textContent = '⚡ 100% (Mémoire)';
+        cacheEl.className = 'telemetry-val sync-ok';
+      } else if (typeof client.cachePercent === 'number' && client.cachePercent > 0) {
+        cacheEl.textContent = `⏳ ${client.cachePercent}% chargé`;
+        cacheEl.className = 'telemetry-val sync-warn';
+      } else {
+        cacheEl.textContent = '⏳ En cours...';
+        cacheEl.className = 'telemetry-val sync-warn';
+      }
+    }
   }
 
   function updateClientTelemetry(client) {
     const isPlaying = client.state === 'playing';
     const d = isPlaying ? (client.driftMs || 0) : 0;
 
+    const targetStatus = isPlaying ? '🟢 En lecture' : '🟡 En veille';
+    const targetDrift = isPlaying ? `${d > 0 ? '+' : ''}${d} ms` : '0 ms (Veille)';
+    const targetDriftClass = 'telemetry-val ' + (Math.abs(d) < 40 ? 'sync-ok' : Math.abs(d) < 120 ? 'sync-warn' : 'sync-err');
+    const targetWakelock = client.wakeLock ? '✅ Actif' : '⚠️ Inactif';
+
+    let targetCacheText = '⏳ En cours...';
+    let targetCacheClass = 'telemetry-val sync-warn';
+    if (client.cached) {
+      targetCacheText = '⚡ 100% (Mémoire)';
+      targetCacheClass = 'telemetry-val sync-ok';
+    } else if (typeof client.cachePercent === 'number' && client.cachePercent > 0) {
+      targetCacheText = `⏳ ${client.cachePercent}% chargé`;
+    }
+
     if (client.side === 'left') {
-      statusLeftEye.textContent = isPlaying ? '🟢 En lecture' : '🟡 En veille';
-      driftLeftEye.textContent = isPlaying ? `${d > 0 ? '+' : ''}${d} ms` : '0 ms (Veille)';
-      driftLeftEye.className = 'telemetry-val ' + (Math.abs(d) < 40 ? 'sync-ok' : Math.abs(d) < 120 ? 'sync-warn' : 'sync-err');
-      wakelockLeftEye.textContent = client.wakeLock ? '✅ Actif' : '⚠️ Inactif';
+      statusLeftEye.textContent = targetStatus;
+      driftLeftEye.textContent = targetDrift;
+      driftLeftEye.className = targetDriftClass;
+      wakelockLeftEye.textContent = targetWakelock;
+      if (cacheLeftEye) {
+        cacheLeftEye.textContent = targetCacheText;
+        cacheLeftEye.className = targetCacheClass;
+      }
     } else if (client.side === 'right') {
-      statusRightEye.textContent = isPlaying ? '🟢 En lecture' : '🟡 En veille';
-      driftRightEye.textContent = isPlaying ? `${d > 0 ? '+' : ''}${d} ms` : '0 ms (Veille)';
-      driftRightEye.className = 'telemetry-val ' + (Math.abs(d) < 40 ? 'sync-ok' : Math.abs(d) < 120 ? 'sync-warn' : 'sync-err');
-      wakelockRightEye.textContent = client.wakeLock ? '✅ Actif' : '⚠️ Inactif';
+      statusRightEye.textContent = targetStatus;
+      driftRightEye.textContent = targetDrift;
+      driftRightEye.className = targetDriftClass;
+      wakelockRightEye.textContent = targetWakelock;
+      if (cacheRightEye) {
+        cacheRightEye.textContent = targetCacheText;
+        cacheRightEye.className = targetCacheClass;
+      }
     }
   }
 
@@ -318,23 +358,38 @@
         if (a.path === data.activeAudio) opt.selected = true;
         selectAudio.appendChild(opt);
       });
-      masterAudio.src = data.activeAudio;
       audioFileName.textContent = data.activeAudio.split('/').pop();
+      try {
+        const cachedUrl = await masterMediaCache.load(data.activeAudio, 'master_audio');
+        masterAudio.src = cachedUrl;
+      } catch (e) {
+        masterAudio.src = data.activeAudio;
+      }
     } catch (e) {
       console.warn('Error loading audios list:', e);
     }
   }
 
-  selectAudio.addEventListener('change', (e) => {
+  selectAudio.addEventListener('change', async (e) => {
     socket.emit('master:select_audio', e.target.value);
-    masterAudio.src = e.target.value;
     audioFileName.textContent = e.target.value.split('/').pop();
+    try {
+      const cachedUrl = await masterMediaCache.load(e.target.value, 'master_audio');
+      masterAudio.src = cachedUrl;
+    } catch (err) {
+      masterAudio.src = e.target.value;
+    }
   });
 
-  socket.on('audio:selected', ({ activeAudio }) => {
+  socket.on('audio:selected', async ({ activeAudio }) => {
     selectAudio.value = activeAudio;
-    masterAudio.src = activeAudio;
     audioFileName.textContent = activeAudio.split('/').pop();
+    try {
+      const cachedUrl = await masterMediaCache.load(activeAudio, 'master_audio');
+      masterAudio.src = cachedUrl;
+    } catch (err) {
+      masterAudio.src = activeAudio;
+    }
   });
 
   function applyAudioConfigToUI() {

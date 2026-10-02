@@ -42,6 +42,12 @@
   let splitterNode = null;
   let mergerNode = null;
 
+  // Local Media Cache (IndexedDB Blob storage)
+  const mediaCache = new DragonMediaCache();
+  let isMediaCached = false;
+  let mediaCachePercent = 0;
+  let currentMediaVersion = '1';
+
   // Load saved calibration from localStorage
   const storageKey = `dragon_calib_${side}`;
   const savedCalib = localStorage.getItem(storageKey);
@@ -53,10 +59,48 @@
     }
   }
 
-  // Set video source
+  // Set initial video source
   const videoSrc = side === 'right' ? '/media/right_eye.mp4' : '/media/left_eye.mp4';
-  video.src = videoSrc;
-  video.load();
+  
+  // Asynchronously ensure media is 100% cached locally before show
+  async function ensureMediaCached(vUrl, aUrl, version = '1') {
+    try {
+      currentMediaVersion = String(version);
+      
+      // 1. Cache Video Blob (takes ~90% of file size)
+      const vBlobUrl = await mediaCache.load(vUrl, `video_${side}`, currentMediaVersion, (p) => {
+        mediaCachePercent = Math.round(p * 0.9);
+      });
+      if (vBlobUrl) {
+        video.src = vBlobUrl;
+        video.load();
+      }
+
+      // 2. Cache Audio Blob (takes ~10% of file size)
+      if (aUrl) {
+        const aBlobUrl = await mediaCache.load(aUrl, 'audio_main', currentMediaVersion, (p) => {
+          mediaCachePercent = 90 + Math.round(p * 0.1);
+        });
+        if (aBlobUrl) {
+          eyeAudio.src = aBlobUrl;
+          eyeAudio.load();
+        }
+      }
+
+      isMediaCached = true;
+      mediaCachePercent = 100;
+      console.log(`[MediaCache] 🚀 ${sideName} : 100% en cache local (0 réseau pendant la lecture)`);
+    } catch (err) {
+      console.warn('[MediaCache] Fallback to direct network streaming:', err);
+      video.src = vUrl;
+      video.load();
+      if (aUrl) {
+        eyeAudio.src = aUrl;
+        eyeAudio.load();
+      }
+    }
+  }
+  ensureMediaCached(videoSrc, currentAudioFile, currentMediaVersion);
 
   // Apply Transform to Video (Pure black borders when scale < 1.0)
   function applyTransform() {
@@ -366,6 +410,9 @@
     if (appState.activeAudio) {
       currentAudioFile = appState.activeAudio;
     }
+    if (appState.mediaVersion && appState.mediaVersion !== currentMediaVersion) {
+      ensureMediaCached(videoSrc, currentAudioFile, appState.mediaVersion);
+    }
     if (appState.status === 'playing') {
       startSyncPlayback(appState.startTime, appState.videoDuration, appState.loop);
     }
@@ -382,11 +429,10 @@
     }
   });
 
-  socket.on('audio:selected', ({ activeAudio }) => {
+  socket.on('audio:selected', ({ activeAudio, mediaVersion: v }) => {
     if (activeAudio) {
       currentAudioFile = activeAudio;
-      eyeAudio.src = currentAudioFile;
-      eyeAudio.load();
+      ensureMediaCached(videoSrc, currentAudioFile, v || Date.now());
     }
   });
 
@@ -414,13 +460,8 @@
   socket.on('media:updated', (data) => {
     showDuration = data.videoDuration;
     const newSrc = side === 'right' ? data.videoInfo.rightPath : data.videoInfo.leftPath;
-    video.src = newSrc;
-    video.load();
-    if (data.activeAudio) {
-      currentAudioFile = data.activeAudio;
-      eyeAudio.src = currentAudioFile;
-      eyeAudio.load();
-    }
+    const newVersion = data.mediaVersion || Date.now();
+    ensureMediaCached(newSrc, data.activeAudio || currentAudioFile, newVersion);
   });
 
   // START SYNCHRONIZED PLAYBACK
@@ -583,7 +624,9 @@
         driftMs: isShowPlaying ? lastDriftMs : 0,
         state: isShowPlaying ? 'playing' : 'idle',
         wakeLock: isWakeLockActive,
-        fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement)
+        fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement),
+        cached: isMediaCached,
+        cachePercent: mediaCachePercent
       });
     }
   }, 400);

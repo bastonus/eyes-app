@@ -56,8 +56,20 @@ const uploadAudio = multer({
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/media', express.static(MEDIA_DIR));
-app.use('/uploads/audio', express.static(AUDIO_DIR));
+app.use('/media', express.static(MEDIA_DIR, {
+  maxAge: '7d',
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    res.setHeader('Accept-Ranges', 'bytes');
+  }
+}));
+app.use('/uploads/audio', express.static(AUDIO_DIR, {
+  maxAge: '7d',
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    res.setHeader('Accept-Ranges', 'bytes');
+  }
+}));
 
 // App state
 const appState = {
@@ -68,6 +80,7 @@ const appState = {
   stopAfterCurrent: false,
   activeAudio: '/media/default_audio.mp3',
   audioTarget: 'master', // 'master' | 'eyes' | 'both'
+  mediaVersion: Date.now(), // Incremented on video / audio updates to invalidate and refresh client cache
   audioConfig: {
     playOnMaster: true,
     playOnEyes: false,
@@ -191,11 +204,15 @@ app.post('/api/upload-video', uploadVideo.single('video'), async (req, res) => {
 
     isProcessingVideo = false;
 
+    // Increment media version for client-side cache refresh
+    appState.mediaVersion = Date.now();
+
     // Broadcast reload event to all connected eyes
     io.emit('media:updated', {
       videoDuration: appState.videoDuration,
       videoInfo: appState.videoInfo,
-      activeAudio: appState.activeAudio
+      activeAudio: appState.activeAudio,
+      mediaVersion: appState.mediaVersion
     });
 
     res.json({ success: true, result });
@@ -215,8 +232,9 @@ app.post('/api/upload-audio', uploadAudio.single('audio'), (req, res) => {
   }
   const audioPath = `/uploads/audio/${req.file.filename}`;
   appState.activeAudio = audioPath;
+  appState.mediaVersion = Date.now();
   
-  io.emit('audio:selected', { activeAudio: audioPath });
+  io.emit('audio:selected', { activeAudio: audioPath, mediaVersion: appState.mediaVersion });
   res.json({ success: true, path: audioPath, name: req.file.originalname });
 });
 
@@ -290,7 +308,8 @@ io.on('connection', (socket) => {
 
   socket.on('master:select_audio', (audioPath) => {
     appState.activeAudio = audioPath;
-    io.emit('audio:selected', { activeAudio: audioPath });
+    appState.mediaVersion = Date.now();
+    io.emit('audio:selected', { activeAudio: audioPath, mediaVersion: appState.mediaVersion });
   });
 
   socket.on('master:set_audio_target', (target) => {

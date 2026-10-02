@@ -48,6 +48,10 @@
           <span>Anti-veille (WakeLock)</span>
           <span id="wakelock-left-eye" class="telemetry-val">--</span>
         </div>
+        <div class="telemetry-row">
+          <span>Cache local (0 réseau)</span>
+          <span id="cache-left-eye" class="telemetry-val">--</span>
+        </div>
         <div style="margin-top: 0.8rem;">
           <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="showQr('/eye?side=left', 'Œil Gauche')">
             📱 Scanner QR Gauche
@@ -74,6 +78,10 @@
         <div class="telemetry-row">
           <span>Anti-veille (WakeLock)</span>
           <span id="wakelock-right-eye" class="telemetry-val">--</span>
+        </div>
+        <div class="telemetry-row">
+          <span>Cache local (0 réseau)</span>
+          <span id="cache-right-eye" class="telemetry-val">--</span>
         </div>
         <div style="margin-top: 0.8rem;">
           <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="showQr('/eye?side=right', 'Œil Droit')">
@@ -282,6 +290,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/sync-engine.js"></script>
+  <script src="/js/media-cache.js"></script>
   <script src="/js/master.js"></script>
 </body>
 </html>
